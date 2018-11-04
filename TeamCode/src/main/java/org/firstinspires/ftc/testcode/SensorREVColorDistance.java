@@ -79,10 +79,10 @@ public class SensorREVColorDistance extends LinearOpMode {
     public void runOpMode() {
 
         // get a reference to the color sensor.
-        sensorColor = hardwareMap.get(ColorSensor.class, "sensor_color_distance");
+        sensorColor = hardwareMap.get(ColorSensor.class, "sensorColorDistance");
 
         // get a reference to the distance sensor that shares the same name.
-        sensorDistance = hardwareMap.get(DistanceSensor.class, "sensor_color_distance");
+        sensorDistance = hardwareMap.get(DistanceSensor.class, "sensorColorDistance");
 
         // hsvValues is an array that will hold the hue, saturation, and value information.
         float hsvValues[] = {0F, 0F, 0F};
@@ -98,13 +98,23 @@ public class SensorREVColorDistance extends LinearOpMode {
         // color of the Robot Controller app to match the hue detected by the RGB sensor.
         int relativeLayoutId = hardwareMap.appContext.getResources().getIdentifier("RelativeLayout", "id", hardwareMap.appContext.getPackageName());
         final View relativeLayout = ((Activity) hardwareMap.appContext).findViewById(relativeLayoutId);
+        long clockSpeed = 0;
+        long currentTime = 0;
 
         // wait for the start button to be pressed.
         waitForStart();
+        long startTime = System.currentTimeMillis();
 
         // loop and read the RGB and distance data.
         // Note we use opModeIsActive() as our loop condition because it is an interruptible method.
         while (opModeIsActive()) {
+            //update clockSpeed
+            currentTime = System.currentTimeMillis();
+            clockSpeed++;
+            telemetry.addData("No. of reading is ", clockSpeed);
+            if ((currentTime - startTime)/1000f != 0)
+                telemetry.addData("Clock Speed is ", clockSpeed/((currentTime - startTime)/1000f));
+
             // convert the RGB values to HSV values.
             // multiply by the SCALE_FACTOR.
             // then cast it back to int (SCALE_FACTOR is a double)
@@ -116,11 +126,13 @@ public class SensorREVColorDistance extends LinearOpMode {
             // send the info back to driver station using telemetry function.
             telemetry.addData("Distance (cm)",
                     String.format(Locale.US, "%.02f", sensorDistance.getDistance(DistanceUnit.CM)));
+            telemetry.addData("Raw", Double.isNaN(sensorDistance.getDistance(DistanceUnit.CM)));
             telemetry.addData("Alpha", sensorColor.alpha());
             telemetry.addData("Red  ", sensorColor.red());
             telemetry.addData("Green", sensorColor.green());
             telemetry.addData("Blue ", sensorColor.blue());
             telemetry.addData("Hue", hsvValues[0]);
+            telemetry.addData("Sat", hsvValues[1]);
 
             // change the background color to match the color detected by the RGB sensor.
             // pass a reference to the hue, saturation, and value array as an argument
