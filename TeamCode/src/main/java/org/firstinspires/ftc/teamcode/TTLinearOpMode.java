@@ -29,6 +29,7 @@
 
 package org.firstinspires.ftc.teamcode;
 
+import java.util.List;
 import android.graphics.Color;
 
 import com.qualcomm.hardware.modernrobotics.ModernRoboticsI2cColorSensor;
@@ -37,7 +38,13 @@ import com.qualcomm.robotcore.hardware.ColorSensor;
 import com.qualcomm.robotcore.util.ElapsedTime;
 import com.qualcomm.robotcore.util.Range;
 
+import org.firstinspires.ftc.robotcore.external.ClassFactory;
+import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
+import org.firstinspires.ftc.robotcore.external.navigation.VuforiaLocalizer;
+
+import org.firstinspires.ftc.robotcore.external.tfod.Recognition;
+import org.firstinspires.ftc.robotcore.external.tfod.TFObjectDetector;
 
 public abstract class TTLinearOpMode extends LinearOpMode {
 
@@ -49,6 +56,10 @@ public abstract class TTLinearOpMode extends LinearOpMode {
     public static final boolean LIMIT_MEC_ON = true;
     public static final boolean LIMIT_MEC_OFF = false;
 
+    private static final String TFOD_MODEL_ASSET = "RoverRuckus.tflite";
+    private static final String LABEL_GOLD_MINERAL = "Gold Mineral";
+    private static final String LABEL_SILVER_MINERAL = "Silver Mineral";
+
     // sometimes it helps to multiply the raw RGB values with a scale factor
     // to amplify/attentuate the measured values.
     static final double SCALE_FACTOR = 255;
@@ -57,6 +68,91 @@ public abstract class TTLinearOpMode extends LinearOpMode {
 
     // hsvValues is an array that will hold the hue, saturation, and value information.
     float hsvValues[] = {0F, 0F, 0F};
+
+    private static final String VUFORIA_KEY = "Afr2UsD/////AAAAGVsbt/Ka6EOAj/MfHaZcCWKIcaxclUoOSaQnk/mNz2rzlo+lylAA/E62EFXpjco7vFmqzFyTw+tvPHZj9qMjMKdWHxsHbq/cbQZ7r6BCe5qBzRNVMg69lJEP7dJ+ss5q41SR0Cqs93RSa09U2idgrO5mIsk5VWR19iAbrcuO7cgqfgYQlpeHchR3Z+NdQo/lbWaRqV1fRNVFcwfI8DzLDwvFlEsKass4F5tglt3lDS1zyA/pzfOU9W5zc3OH33dNTN/M4w4dkVDDEOnzmkOP+0svMgM0J4vDaRx+2ZEiFrmVWvW5wz/VumSfniVgg2SlWjy3d0+GCVfTra7OhmBKlWH0qlTYemBc8YE+XtErUG/D";
+    private VuforiaLocalizer vuforia;
+    public TFObjectDetector tfod;
+
+
+    public synchronized void waitForStart(Telemetry telemetry) {
+        ElapsedTime runtime = new ElapsedTime();
+
+        while (!isStarted()) {
+            synchronized (this) {
+                try {
+                    telemetry.addData("in waitForStart()", "runtime: " + runtime.seconds());
+                    if (tfod != null) {
+                        // getUpdatedRecognitions() will return null if no new information is available since
+                        // the last time that call was made.
+                        List<Recognition> updatedRecognitions = tfod.getUpdatedRecognitions();
+                        if (updatedRecognitions != null) {
+                            telemetry.addData("# Object Detected", updatedRecognitions.size());
+
+                            int goldMineralX = -1;
+                            int silverMineral1X = -1;
+                            int silverMineral2X = -1;
+                            for (Recognition recognition : updatedRecognitions) {
+                                int Pos = (int) recognition.getLeft();
+                                telemetry.addData("Pos", "Pos: " + Pos + " | Label: " + recognition.getLabel());
+
+                                if (recognition.getLabel().equals(LABEL_GOLD_MINERAL)) {
+                                    goldMineralX = (int) recognition.getLeft();
+                                } else if (silverMineral1X == -1) {
+                                    silverMineral1X = (int) recognition.getLeft();
+                                } else {
+                                    silverMineral2X = (int) recognition.getLeft();
+                                }
+                            }
+                            if (goldMineralX != -1 && silverMineral1X != -1 && silverMineral2X != -1) {
+                                if (goldMineralX < silverMineral1X && goldMineralX < silverMineral2X) {
+                                    telemetry.addData("Gold Mineral Position", "Left");
+                                } else if (goldMineralX > silverMineral1X && goldMineralX > silverMineral2X) {
+                                    telemetry.addData("Gold Mineral Position", "Right");
+                                } else {
+                                    telemetry.addData("Gold Mineral Position", "Center");
+                                }
+                            }
+                        }
+                    }
+                    telemetry.update();
+                    this.wait();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            }
+        }
+    }
+
+
+    /**
+     * Initialize the Vuforia localization engine.
+     */
+    public void initVuforia() {
+        /*
+         * Configure Vuforia by creating a Parameter object, and passing it to the Vuforia engine.
+         */
+        VuforiaLocalizer.Parameters parameters = new VuforiaLocalizer.Parameters();
+
+        parameters.vuforiaLicenseKey = VUFORIA_KEY;
+        parameters.cameraDirection = VuforiaLocalizer.CameraDirection.BACK;
+
+        //  Instantiate the Vuforia engine
+        vuforia = ClassFactory.getInstance().createVuforia(parameters);
+
+        // Loading trackables is not necessary for the Tensor Flow Object Detection engine.
+    }
+
+    /**
+     * Initialize the Tensor Flow Object Detection engine.
+     */
+    public void initTfod() {
+        int tfodMonitorViewId = hardwareMap.appContext.getResources().getIdentifier(
+                "tfodMonitorViewId", "id", hardwareMap.appContext.getPackageName());
+        TFObjectDetector.Parameters tfodParameters = new TFObjectDetector.Parameters(tfodMonitorViewId);
+        tfod = ClassFactory.getInstance().createTFObjectDetector(tfodParameters, vuforia);
+        tfod.loadModelFromAsset(TFOD_MODEL_ASSET, LABEL_GOLD_MINERAL, LABEL_SILVER_MINERAL);
+    }
 
 
     public void timeDrive ( double speed,
@@ -192,16 +288,21 @@ public abstract class TTLinearOpMode extends LinearOpMode {
             rearRightSpeed = -powerCompY - powerCompX;
 
             // keep looping while we are still active, and BOTH motors are running.
-            while (opModeIsActive() && robot.rangeLeft.getDistance(DistanceUnit.CM) > dist && driveTime.seconds() < 1.0) {
+            while (opModeIsActive() && driveTime.seconds() < 10.0) {
+
+                /*
                 robot.motorFrontLeft.setPower(frontLeftSpeed);
                 robot.motorFrontRight.setPower(frontRightSpeed);
                 robot.motorRearLeft.setPower(rearLeftSpeed);
                 robot.motorRearRight.setPower(rearRightSpeed);
+                */
 
                 // Display drive status for the driver.
                 telemetry.addData("Speed",  "FL %5.2f:FR %5.2f:RL %5.2f:RR %5.2f", frontLeftSpeed, frontRightSpeed, rearLeftSpeed, rearRightSpeed);
                 telemetry.addData("Gyro", "Heading: " + robot.gyro.getHeading() + " | IntZValue: " + robot.gyro.getIntegratedZValue());
+                telemetry.addData("Left", "Range: " + robot.rangeLeft.getDistance(DistanceUnit.CM));
                 telemetry.update();
+                sleep(500);
             }
 
             // Stop all motion;
@@ -463,5 +564,70 @@ public abstract class TTLinearOpMode extends LinearOpMode {
         return stepVal;
     }
 
+    /**
+     * {@link #tfod} is the variable we will use to store our instance of the Tensor Flow Object
+     * Detection engine.
+     */
+    // private TFObjectDetector tfod;
+    public String senseMineral (){
+
+        String goldPosition = "M";
+        initVuforia();
+
+        if (ClassFactory.getInstance().canCreateTFObjectDetector()) {
+            initTfod();
+        } else {
+            telemetry.addData("Sorry!", "This device is not compatible with TFOD");
+        }
+
+        while (opModeIsActive()) {
+            if (tfod != null) {
+                // getUpdatedRecognitions() will return null if no new information is available since
+                // the last time that call was made.
+                List<Recognition> updatedRecognitions = tfod.getUpdatedRecognitions();
+                if (updatedRecognitions != null) {
+                    telemetry.addData("# Object Detected", updatedRecognitions.size());
+
+                    if (updatedRecognitions.size() == 3) {
+                        int goldMineralX = -1;
+                        int silverMineral1X = -1;
+                        int silverMineral2X = -1;
+                        for (Recognition recognition : updatedRecognitions) {
+                            if (recognition.getLabel().equals(LABEL_GOLD_MINERAL)) {
+                                goldMineralX = (int) recognition.getLeft();
+                            /*telemetry.addData("gMX", goldMineralX);
+                            telemetry.update();
+                            sleep(5000);*/
+                            } else if (silverMineral1X == -1) {
+                                silverMineral1X = (int) recognition.getLeft();
+                              /*telemetry.addData("sM1X", goldMineralX);
+                              telemetry.update();
+                              sleep(5000);*/
+                            } else {
+                                silverMineral2X = (int) recognition.getLeft();
+                              /*telemetry.addData("sM2X", goldMineralX);
+                              telemetry.update();
+                              sleep(5000);*/
+                            }
+                        }
+                        //Comparing the left postion to determin the Gold positon
+                        if (goldMineralX != -1 && silverMineral1X != -1 && silverMineral2X != -1) {
+                            if (goldMineralX < silverMineral1X && goldMineralX < silverMineral2X) {
+                                //telemetry.addData("Gold Mineral Position", "Left");
+                                goldPosition = "L";
+                            } else if (goldMineralX > silverMineral1X && goldMineralX > silverMineral2X) {
+                                //telemetry.addData("Gold Mineral Position", "Right");
+                                goldPosition = "R";
+                            }
+                        }
+
+                    }
+
+                }
+            }
+        }
+
+        return goldPosition;
+    }
 }
 

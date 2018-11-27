@@ -91,7 +91,7 @@ public class TTHardware {
         limitLiftTop.setMode(DigitalChannel.Mode.INPUT);
 
         servoScreen = hwMap.get(Servo.class, "servoScreen");
-        servoScreen.setPosition(0.3);
+        servoScreen.setPosition(0.2);
 
         servoMarker = hwMap.get(Servo.class, "servoMarker");
         servoMarker.setPosition(0.5);

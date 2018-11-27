@@ -136,30 +136,38 @@ public class TTPOVDrive extends TTLinearOpMode {
 
             // Gamepad 2 - Dpad Up and Dpad Down
             if (gamepad2.dpad_up) {
-                if (robot.motorExtend.getCurrentPosition() > 4000 && robot.limitExtend.getState() == LIMIT_MAG_ON && (!gamepad2.left_bumper || !gamepad2.right_bumper)) {
+                if (robot.motorExtend.getCurrentPosition() < -5000 && robot.limitExtend.getState() == LIMIT_MAG_ON && (!gamepad2.left_bumper || !gamepad2.right_bumper)) {
                     robot.motorExtend.setPower(0.0);
-                } else if (robot.motorExtend.getCurrentPosition() > 4000) {
-                    robot.motorExtend.setPower(0.3);
-                } else if (robot.motorExtend.getCurrentPosition() > 3500) {
-                    robot.motorExtend.setPower(0.5);
                 } else {
-                    robot.motorExtend.setPower(1.0);
+                    robot.motorExtend.setPower(0.5);
                 }
             } else if (gamepad2.dpad_down) {
-                if (robot.motorExtend.getCurrentPosition() < 500 && robot.limitExtend.getState() == LIMIT_MAG_ON && (!gamepad2.left_bumper || !gamepad2.right_bumper)) {
+                if (robot.motorExtend.getCurrentPosition() > 0 && robot.limitExtend.getState() == LIMIT_MAG_ON && (!gamepad2.left_bumper || !gamepad2.right_bumper)) {
                     robot.motorExtend.setPower(0.0);
-                } else if (robot.motorExtend.getCurrentPosition() < 500) {
-                    robot.motorExtend.setPower(-0.3);
-                } else if (robot.motorExtend.getCurrentPosition() < 1000) {
-                    robot.motorExtend.setPower(-0.5);
                 } else {
-                    robot.motorExtend.setPower(-1.0);
+                    robot.motorExtend.setPower(-0.5);
                 }
             } else {
                 robot.motorExtend.setPower(0.0);
             }
 
-            // Gamepad 1 - Left Trigger and Right Trigger
+            if (gamepad2.left_trigger > 0.1) {   // raising beam, lower robot
+                if (robot.limitLanding.getState() == LIMIT_MAG_ON && robot.motorLanding.getCurrentPosition() > -400 && (!gamepad2.left_bumper || !gamepad2.right_bumper)) {
+                    robot.motorLanding.setPower(0.0);
+                } else {
+                    robot.motorLanding.setPower(-0.5);
+                }
+            } else if (gamepad2.right_trigger > 0.1) {   // lowering beam, lift robot
+                if (robot.limitLanding.getState() == LIMIT_MAG_ON && robot.motorLanding.getCurrentPosition() < -400 && (!gamepad2.left_bumper || !gamepad2.right_bumper)) {
+                    robot.motorLanding.setPower(0.0);
+                } else {
+                    robot.motorLanding.setPower(0.5);
+                }
+            } else {
+                robot.motorLanding.setPower(0.0);
+            }
+/*
+            // Gamepad 2 - Left Trigger and Right Trigger
             if (gamepad2.left_trigger > 0.1) {   // lower robot
                 if (robot.motorLanding.getCurrentPosition() < -1000 && robot.limitLanding.getState() == LIMIT_MAG_ON && (!gamepad2.left_bumper || !gamepad2.right_bumper)) {
                     robot.motorLanding.setPower(0.0);
@@ -183,19 +191,19 @@ public class TTPOVDrive extends TTLinearOpMode {
             } else {
                 robot.motorLanding.setPower(0.0);
             }
-
+*/
             // Gamepad 2 - Y and A
             if (gamepad2.y) {
                 if (robot.limitLiftTop.getState() == LIMIT_MEC_ON && (!gamepad2.left_bumper || !gamepad2.right_bumper)) {
                     robot.motorLift.setPower(0.0);
                 } else {
-                    robot.motorLift.setPower(-0.5);
+                    robot.motorLift.setPower(-1.0);
                 }
             } else if (gamepad2.a) {
                 if (robot.limitLiftBottom.getState() == LIMIT_MEC_ON && (!gamepad2.left_bumper || !gamepad2.right_bumper)) {
                     robot.motorLift.setPower(0.0);
                 } else {
-                    robot.motorLift.setPower(0.5);
+                    robot.motorLift.setPower(1.0);
                 }
             } else {
                 robot.motorLift.setPower(0.0);
@@ -205,7 +213,7 @@ public class TTPOVDrive extends TTLinearOpMode {
             if (gamepad2.x) {
                 robot.servoScreen.setPosition(0.8);
             } else {
-                robot.servoScreen.setPosition(0.3);
+                robot.servoScreen.setPosition(0.2);
             }
 
             // Gamepad 2 - B
