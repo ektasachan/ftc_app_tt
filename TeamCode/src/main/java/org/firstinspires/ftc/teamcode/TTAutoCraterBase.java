@@ -1,20 +1,24 @@
 package org.firstinspires.ftc.teamcode;
 
+import java.util.List;
+
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
+import org.firstinspires.ftc.robotcore.external.tfod.Recognition;
 
 
 @Autonomous(name = "TT Auto Crater Base", group = "TT")
 public class TTAutoCraterBase extends TTLinearOpMode {
 
     // States
-    private enum autoState {
+    private enum AutoState {
         INITIALIZE,
 
         LANDING,
+        LINE_UP_GOLD,
         DETECT_MINERAL_MID,
         DETECT_MINERAL_RIGHT,
         PUSH_PREP,
@@ -25,15 +29,13 @@ public class TTAutoCraterBase extends TTLinearOpMode {
 
         STOP
     }
+    private AutoState currentState = AutoState.INITIALIZE;
 
-    private autoState currentState = autoState.INITIALIZE;
-
-    private enum GoldMineralPos {LEFT, MIDDLE, RIGHT, UNKNOWN}
-
-    GoldMineralPos goldMineralPos = GoldMineralPos.UNKNOWN;
+    private GoldMineralPos goldMineralPos = GoldMineralPos.UNKNOWN;
 
     /* Declare OpMode members. */
     private ElapsedTime runtime = new ElapsedTime();
+    private ElapsedTime timer = new ElapsedTime();
 
 
     @Override
@@ -52,21 +54,44 @@ public class TTAutoCraterBase extends TTLinearOpMode {
         robot.motorExtend.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         robot.motorLanding.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
 
+        /*
+        sleep (2000);
+
         // start calibrating the gyro.
         telemetry.addData(">", "Gyro Calibrating. Do Not move!");
         telemetry.update();
+
         robot.gyro.calibrate();
         // make sure the gyro is calibrated.
         while (robot.gyro.isCalibrating())  {
             sleep(50);
             idle();
         }
-
         telemetry.addData(">", "Robot Heading = %d", robot.gyro.getIntegratedZValue());
         telemetry.update();
+        */
 
+        /* activate Tensor Flow Object Detection */
+        initVuforia();
+        initTfod();
+        if (tfod != null) {
+            tfod.activate();
+            List<Recognition> updatedRecognitions = null;
+            while (!opModeIsActive() && !isStopRequested()) {
+                updatedRecognitions = tfod.getUpdatedRecognitions();
+                if (updatedRecognitions != null) {
+                    goldMineralPos = getGoldPosition(updatedRecognitions);
+                    telemetry.addData("Init Gold Pos", goldMineralPos);
+                    telemetry.update();
+                }
+            }
+        }
 
         waitForStart();
+
+        if (tfod != null) {
+            tfod.deactivate();
+        }
 
         // run until the end of the match (driver presses STOP)
         while (opModeIsActive()) {
@@ -77,77 +102,97 @@ public class TTAutoCraterBase extends TTLinearOpMode {
                     telemetry.addData("state", currentState.toString());
                     runtime.reset();
 
-                    currentState = autoState.LANDING;
+                    if (goldMineralPos.equals(GoldMineralPos.UNKNOWN) && tfod != null) {
+                        tfod.activate();
+                    }
+
+                    currentState = AutoState.LANDING;
                     break;
 
                 case LANDING:
                     telemetry.addData("state", currentState.toString());
 
                     // Lower landing motor
-                    robot.motorLanding.setPower(1.0);
+                    robot.motorLanding.setPower(-0.5);
                     robot.motorLift.setPower(-0.5);
                     sleep(500);
                     robot.motorLift.setPower(0.0);
-                    while (robot.limitLanding.getState() == LIMIT_MAG_OFF && runtime.seconds() < 6.0) {
-                        robot.motorLanding.setPower(1.0);
+                    while (robot.limitLanding.getState() == LIMIT_MAG_OFF && runtime.seconds() < 3.0) {
+                        robot.motorLanding.setPower(-0.5);
                     }
                     robot.motorLanding.setPower(0.0);
 
-                    timeDrive(0.25, 0.2, 0.0);
+                    // if gold position still unknown, detect for another 5 seconds
+                    if (goldMineralPos.equals(GoldMineralPos.UNKNOWN) && tfod != null) {
+                        timer.reset();
+                        List<Recognition> updatedRecognitions = null;
+                        while (timer.seconds() < 5.0) {
+                            updatedRecognitions = tfod.getUpdatedRecognitions();
+                            if (updatedRecognitions != null) {
+                                goldMineralPos = getGoldPosition(updatedRecognitions);
+                                telemetry.addData("Gold Pos", goldMineralPos);
+                                telemetry.update();
+                            }
+                        }
+                    }
+                    if (tfod != null) {
+                        tfod.shutdown();
+                    }
 
                     // Move clear off of landing area
-                    timeDrive(0.3, 0.8, -90.0);
+                    timeDrive(0.5, 0.3, -90.0);
 
-                    currentState = autoState.DETECT_MINERAL_MID;
+                    driveToLine(0.35, 0.0, 1.0);
+
+                    gyroHold(0.35, 0.0, 1.0);
+
+                    // if gold still unknown, then assume middle
+                    if (goldMineralPos.equals(GoldMineralPos.UNKNOWN)) {
+                        goldMineralPos = GoldMineralPos.MIDDLE;
+                    }
+                    currentState = AutoState.LINE_UP_GOLD;
                     break;
 
                 case DETECT_MINERAL_MID:
                     telemetry.addData("state", currentState.toString());
 
-                    gyroHold(0.35, 0.0, 1.0);
-
-                    driveToLine(0.3, 0.0, 1.5);
-
                     robot.motorExtend.setPower(1.0);
-                    robot.motorLift.setPower(0.5);
-                    sleep(500);
-                    robot.motorLift.setPower(0.0);
-                    while (robot.motorExtend.getCurrentPosition() < 4200 && robot.limitExtend.getState() == LIMIT_MAG_OFF) {
-                        robot.motorExtend.setPower(0.5);
+                    while (robot.motorExtend.getCurrentPosition() > -4000 && robot.limitExtend.getState() == LIMIT_MAG_OFF) {
+                        robot.motorExtend.setPower(0.3);
                     }
                     robot.motorExtend.setPower(0.0);
 
                     int count = 0;
                     while (count++ < 5 && (Double.isNaN(robot.sensorDistFront.getDistance(DistanceUnit.CM)) || robot.sensorDistFront.getDistance(DistanceUnit.CM) > 25)) {
-                        timeDrive(0.3, 0.2, 90.0);
+                        timeDrive(0.35, 0.2, 90.0);
                         telemetry.addData("sensor", "count: " + count + " | dist: " + robot.sensorDistFront.getDistance(DistanceUnit.CM));
                         telemetry.update();
                     }
-
+                    // if still Not-a-Number, move on to next mineral
                     if (Double.isNaN(robot.sensorDistFront.getDistance(DistanceUnit.CM))) {
-                        currentState = autoState.DETECT_MINERAL_RIGHT;
+                        currentState = AutoState.DETECT_MINERAL_RIGHT;
                         break;
                     }
 
                     if (isGold(robot.sensorColorFront)) {
                         telemetry.addData("Found ", "GOLD");
                         goldMineralPos = GoldMineralPos.MIDDLE;
-                        currentState = autoState.PUSH_PREP;
+                        currentState = AutoState.PUSH_PREP;
                         break;
                     } else {
                         telemetry.addData("Found ", "SILVER");
-                        currentState = autoState.DETECT_MINERAL_RIGHT;
+                        currentState = AutoState.DETECT_MINERAL_RIGHT;
                         break;
                     }
 
                 case DETECT_MINERAL_RIGHT:
                     telemetry.addData("state", currentState.toString());
 
-                    timeDrive(0.3, 2.0, 95.0);
+                    timeDrive(0.5, 1.5, 90.0);
 
                     int countR = 0;
                     while (countR++ < 5 && (Double.isNaN(robot.sensorDistFront.getDistance(DistanceUnit.CM)) || robot.sensorDistFront.getDistance(DistanceUnit.CM) > 25)) {
-                        timeDrive(0.3, 0.2, 90.0);
+                        timeDrive(0.35, 0.2, 90.0);
                         telemetry.addData("sensor", "countR: " + countR + " | dist: " + robot.sensorDistFront.getDistance(DistanceUnit.CM));
                         telemetry.update();
                     }
@@ -158,67 +203,109 @@ public class TTAutoCraterBase extends TTLinearOpMode {
                     } else {
                         telemetry.addData("Found ", "R SILVER");
                         goldMineralPos = GoldMineralPos.LEFT;
-                        timeDrive(0.3, 3.5, -88.0);
+                        timeDrive(0.5, 2.5, -88.0);
                     }
-                    currentState = autoState.PUSH_PREP;
+                    currentState = AutoState.PUSH_PREP;
                     break;
 
                 case PUSH_PREP:
                     telemetry.addData("state", currentState.toString());
 
-                    while (robot.motorExtend.getCurrentPosition() > 0 && robot.limitExtend.getState() == LIMIT_MAG_OFF) {
-                        robot.motorExtend.setPower(-0.5);
+                    while (robot.motorExtend.getCurrentPosition() < -500 && robot.limitExtend.getState() == LIMIT_MAG_OFF) {
+                        robot.motorExtend.setPower(-0.3);
                     }
                     robot.motorExtend.setPower(0.0);
-                    robot.servoScreen.setPosition(0.8);
+//                    robot.servoScreen.setPosition(0.8);
 
-                    timeDrive(0.3, 0.5, 90.0);
+                    timeDrive(0.5, 0.3, 90.0);
 
-                    currentState = autoState.PUSH_GOLD;
+                    currentState = AutoState.PUSH_GOLD;
+                    break;
+
+                case LINE_UP_GOLD:
+                    telemetry.addData("state", currentState.toString());
+
+                    if (goldMineralPos.equals(GoldMineralPos.LEFT)) {
+                        timeDrive(0.5, 0.5, -40.0);
+                    } else if (goldMineralPos.equals(GoldMineralPos.RIGHT)) {
+                        timeDrive(0.5, 1.5, 80.0);
+                    } else {
+                        timeDrive(0.5, 0.6, 65.0);
+                    }
+                    gyroHold(0.35, 0.0, 1.0);
+
+                    currentState = AutoState.PUSH_GOLD;
                     break;
 
                 case PUSH_GOLD:
                     telemetry.addData("state", currentState.toString());
+                    timeDrive(0.5, 0.5, 0.0);
+                    timeDrive(0.5, 0.6, 180.0);
+                    // Push gold mineral to base (push to left-half of base)
+                    if (goldMineralPos.equals(GoldMineralPos.LEFT)) {
+                        timeDrive(0.5, 1.5, -95.0);
+                    } else if (goldMineralPos.equals(GoldMineralPos.RIGHT)) {
+                        timeDrive(0.5, 3.0, -105.0);
+                    } else {
+                        timeDrive(0.5, 2.3, -100.0);
+                    }
+                    gyroHold(0.35, 45.0, 1.5);
 
-                    timeDrive(0.3, 2.0, 0.0);
+                    timer.reset();
+                    while (opModeIsActive() && robot.rangeLeft.getDistance(DistanceUnit.CM) > 20 && timer.seconds() < 3) {
+                        timeDrive(0.35, 0.2, -45.0);
+                    }
 
-                    timeDrive(0.3, 1.3, 180.0);
-
-                    currentState = autoState.PLACE_TEAM_MARKER;
+                    currentState = AutoState.PLACE_TEAM_MARKER;
                     break;
 
                 case PLACE_TEAM_MARKER:
                     telemetry.addData("state", currentState.toString());
 
-                    timeDrive(0.3, 3.0, -90.0);
-                    if (goldMineralPos.equals(GoldMineralPos.LEFT)) {
-                        timeDrive(0.3, 2.5, -90.0);
-                    } else if (goldMineralPos.equals(GoldMineralPos.RIGHT)) {
-                        timeDrive(0.3, 3.5, -90.0);
-                    } else {
-                        timeDrive(0.3, 3.0, -90.0);
-                    }
+                    timeDrive(0.5, 1.3, -135.0);
 
-                    gyroHold(0.35, 45.0, 1.5);
+                    driveToLine(0.35, -135.0, 1.0);
 
-                    distLeftDrive(0.3, 25, -45.0);
+                    gyroHold(0.35, 45.0, 1.0);
 
-                    timeDrive(0.5, 3.0, -125.0);
-
-                    distRearDrive(0.3, 50, -145.0);
+                    timeDrive(0.5, 0.35, -135.0);
 
                     // Set marker servo position down to drop team marker
                     robot.servoMarker.setPosition(1.0);
 
-                    currentState = autoState.STOP;
+                    sleep(500);
+
+                    currentState = AutoState.MOVE_TO_CRATER;
                     break;
 
                 case MOVE_TO_CRATER:
                     telemetry.addData("state", currentState.toString());
 
-                    gyroHold(0.35, 45.0, 1.5);
+                    gyroHold(0.35, 45.0, 1.0);
 
-                    currentState = autoState.STOP;
+                    int travelCount = 0;
+                    while (travelCount++ < 3) {
+                        double distLeft = robot.rangeLeft.getDistance(DistanceUnit.CM);
+                        if (distLeft > 25) {
+                            timeDrive(0.5, 0.9, 38.0);
+                        } else if (distLeft < 10) {
+                            timeDrive(0.5, 0.9, 48.0);
+                        } else {
+                            timeDrive(0.5, 0.9, 43.0);
+                        }
+                    }
+
+                    timer.reset();
+                    robot.motorExtend.setPower(1.0);
+                    sleep(200);
+                    while (robot.motorExtend.getCurrentPosition() > -3500 && robot.limitExtend.getState() == LIMIT_MAG_OFF && timer.seconds() < 2.0) {
+                        robot.motorExtend.setPower(0.3);
+                    }
+                    robot.motorExtend.setPower(0.0);
+
+                    gyroHold(0.35, 45.0, 3.0);
+
+                    currentState = AutoState.STOP;
                     break;
 
                 case STOP:

@@ -1,5 +1,6 @@
 package org.firstinspires.ftc.teamcode;
 
+import com.qualcomm.hardware.bosch.BNO055IMU;
 import com.qualcomm.robotcore.hardware.ColorSensor;
 import com.qualcomm.robotcore.hardware.DigitalChannel;
 import com.qualcomm.robotcore.hardware.DistanceSensor;
@@ -8,9 +9,12 @@ import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.hardware.modernrobotics.ModernRoboticsI2cGyro;
 import com.qualcomm.robotcore.hardware.Servo;
 
+
 public class TTHardware {
 
-    public ModernRoboticsI2cGyro gyro = null;
+    public BNO055IMU imu1 = null;
+    //public BNO055IMU imu2 = null;
+    //public ModernRoboticsI2cGyro gyro = null;
 
     /* Public OpMode members. */
     public DcMotor motorFrontLeft = null;
@@ -66,7 +70,15 @@ public class TTHardware {
         motorRearLeft.setPower(0.0);
         motorRearRight.setPower(0.0);
 
-        gyro = hwMap.get(ModernRoboticsI2cGyro.class, "gyro");
+        BNO055IMU.Parameters parameters = new BNO055IMU.Parameters();
+        parameters.angleUnit           = BNO055IMU.AngleUnit.DEGREES;
+        parameters.calibrationDataFile = "AdafruitIMUCalibration.json"; // see the calibration sample opmode
+        imu1 = hwMap.get(BNO055IMU.class, "imu1");
+        imu1.initialize(parameters);
+        //imu2 = hwMap.get(BNO055IMU.class, "imu2");
+        //imu2.initialize(parameters);
+
+        //gyro = hwMap.get(ModernRoboticsI2cGyro.class, "gyro");
 
         motorExtend  = hwMap.get(DcMotor.class, "motorExtend");
         motorLanding  = hwMap.get(DcMotor.class, "motorLanding");
@@ -91,7 +103,7 @@ public class TTHardware {
         limitLiftTop.setMode(DigitalChannel.Mode.INPUT);
 
         servoScreen = hwMap.get(Servo.class, "servoScreen");
-        servoScreen.setPosition(0.2);
+        servoScreen.setPosition(0.4);
 
         servoMarker = hwMap.get(Servo.class, "servoMarker");
         servoMarker.setPosition(0.5);

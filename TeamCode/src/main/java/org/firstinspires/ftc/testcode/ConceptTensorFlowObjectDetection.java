@@ -103,15 +103,13 @@ public class ConceptTensorFlowObjectDetection extends LinearOpMode {
         telemetry.addData(">", "Press Play to start tracking");
         telemetry.update();
 
-
-
         waitForStart();
 
         telemetry.addData("opmode active?", opModeIsActive());
         telemetry.addData("isStarted", isStarted());
         telemetry.addData("isStopRequested", isStopRequested());
         telemetry.update();
-        sleep(5000);
+        sleep(1000);
 
 
         if (opModeIsActive()) {
@@ -120,19 +118,45 @@ public class ConceptTensorFlowObjectDetection extends LinearOpMode {
                 tfod.activate();
             }
 
+            int nullCount = 0;
+            int updatedCount = 0;
             while (opModeIsActive()) {
+
+                if (gamepad2.x) {
+                    if (tfod != null) {
+                        tfod.deactivate();
+                        telemetry.addData("tfod", "null? " + (tfod == null ? "Y" : "N"));
+                        telemetry.update();
+                        sleep(3000);
+                    }
+                }
+
+                if (gamepad2.a) {
+                    if (tfod != null) {
+                        tfod.activate();
+                        telemetry.addData("tfod", "activate");
+                        telemetry.update();
+                        sleep(3000);
+                    }
+                }
+
+
                 if (tfod != null) {
                     // getUpdatedRecognitions() will return null if no new information is available since
                     // the last time that call was made.
                     List<Recognition> updatedRecognitions = tfod.getUpdatedRecognitions();
+                    if (updatedRecognitions == null) {
+                        nullCount++;
+                    } else {
+                        updatedCount++;
+                    }
                     if (updatedRecognitions != null) {
                       telemetry.addData("# Object Detected", updatedRecognitions.size());
                       for (Recognition recognition : updatedRecognitions) {
-                          int Pos = (int) recognition.getLeft();
-                          telemetry.addData("Pos", "Pos: " + Pos + " | Label: " + recognition.getLabel());
+                          int top = (int) recognition.getTop();
+                          int left = (int) recognition.getLeft();
+                          telemetry.addData("Pos", "Left: " + left +  " | Top: "+ top + " | Label: " + recognition.getLabel());
                       }
-
-
 /*
                             if (updatedRecognitions.size() == 3) {
                         int goldMineralX = -1;
@@ -167,7 +191,7 @@ public class ConceptTensorFlowObjectDetection extends LinearOpMode {
                         }
                       }
                         */
-                      telemetry.update();
+                        telemetry.update();
                     }
                 }
             }

@@ -40,31 +40,39 @@ import com.qualcomm.robotcore.util.Range;
 
 import org.firstinspires.ftc.robotcore.external.ClassFactory;
 import org.firstinspires.ftc.robotcore.external.Telemetry;
+import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
+import org.firstinspires.ftc.robotcore.external.navigation.AxesOrder;
+import org.firstinspires.ftc.robotcore.external.navigation.AxesReference;
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
+import org.firstinspires.ftc.robotcore.external.navigation.Orientation;
 import org.firstinspires.ftc.robotcore.external.navigation.VuforiaLocalizer;
 
 import org.firstinspires.ftc.robotcore.external.tfod.Recognition;
 import org.firstinspires.ftc.robotcore.external.tfod.TFObjectDetector;
 
+
 public abstract class TTLinearOpMode extends LinearOpMode {
 
-    static final double     HEADING_THRESHOLD       = 1;       // As tight as we can make it with an integer gyro
-    static final double     P_TURN_COEFF            = 0.15;    // Larger is more responsive, but also less stable
+    static final double     HEADING_THRESHOLD       = 0.5;    // As tight as we can make it with an integer gyro
+    static final double     P_TURN_COEFF            = 0.1;    // Larger is more responsive, but also less stable
 
     public static final boolean LIMIT_MAG_ON = false;
     public static final boolean LIMIT_MAG_OFF = true;
     public static final boolean LIMIT_MEC_ON = true;
     public static final boolean LIMIT_MEC_OFF = false;
 
-    private static final String TFOD_MODEL_ASSET = "RoverRuckus.tflite";
-    private static final String LABEL_GOLD_MINERAL = "Gold Mineral";
-    private static final String LABEL_SILVER_MINERAL = "Silver Mineral";
+    public static final String TFOD_MODEL_ASSET = "RoverRuckus.tflite";
+    public static final String LABEL_GOLD_MINERAL = "Gold Mineral";
+    public static final String LABEL_SILVER_MINERAL = "Silver Mineral";
+
+    public enum GoldMineralPos {LEFT, MIDDLE, RIGHT, UNKNOWN}
 
     // sometimes it helps to multiply the raw RGB values with a scale factor
     // to amplify/attentuate the measured values.
     static final double SCALE_FACTOR = 255;
 
     public TTHardware robot = null;
+    private Orientation angles1;
 
     // hsvValues is an array that will hold the hue, saturation, and value information.
     float hsvValues[] = {0F, 0F, 0F};
@@ -72,87 +80,6 @@ public abstract class TTLinearOpMode extends LinearOpMode {
     private static final String VUFORIA_KEY = "Afr2UsD/////AAAAGVsbt/Ka6EOAj/MfHaZcCWKIcaxclUoOSaQnk/mNz2rzlo+lylAA/E62EFXpjco7vFmqzFyTw+tvPHZj9qMjMKdWHxsHbq/cbQZ7r6BCe5qBzRNVMg69lJEP7dJ+ss5q41SR0Cqs93RSa09U2idgrO5mIsk5VWR19iAbrcuO7cgqfgYQlpeHchR3Z+NdQo/lbWaRqV1fRNVFcwfI8DzLDwvFlEsKass4F5tglt3lDS1zyA/pzfOU9W5zc3OH33dNTN/M4w4dkVDDEOnzmkOP+0svMgM0J4vDaRx+2ZEiFrmVWvW5wz/VumSfniVgg2SlWjy3d0+GCVfTra7OhmBKlWH0qlTYemBc8YE+XtErUG/D";
     private VuforiaLocalizer vuforia;
     public TFObjectDetector tfod;
-
-
-    public synchronized void waitForStart(Telemetry telemetry) {
-        ElapsedTime runtime = new ElapsedTime();
-
-        while (!isStarted()) {
-            synchronized (this) {
-                try {
-                    telemetry.addData("in waitForStart()", "runtime: " + runtime.seconds());
-                    if (tfod != null) {
-                        // getUpdatedRecognitions() will return null if no new information is available since
-                        // the last time that call was made.
-                        List<Recognition> updatedRecognitions = tfod.getUpdatedRecognitions();
-                        if (updatedRecognitions != null) {
-                            telemetry.addData("# Object Detected", updatedRecognitions.size());
-
-                            int goldMineralX = -1;
-                            int silverMineral1X = -1;
-                            int silverMineral2X = -1;
-                            for (Recognition recognition : updatedRecognitions) {
-                                int Pos = (int) recognition.getLeft();
-                                telemetry.addData("Pos", "Pos: " + Pos + " | Label: " + recognition.getLabel());
-
-                                if (recognition.getLabel().equals(LABEL_GOLD_MINERAL)) {
-                                    goldMineralX = (int) recognition.getLeft();
-                                } else if (silverMineral1X == -1) {
-                                    silverMineral1X = (int) recognition.getLeft();
-                                } else {
-                                    silverMineral2X = (int) recognition.getLeft();
-                                }
-                            }
-                            if (goldMineralX != -1 && silverMineral1X != -1 && silverMineral2X != -1) {
-                                if (goldMineralX < silverMineral1X && goldMineralX < silverMineral2X) {
-                                    telemetry.addData("Gold Mineral Position", "Left");
-                                } else if (goldMineralX > silverMineral1X && goldMineralX > silverMineral2X) {
-                                    telemetry.addData("Gold Mineral Position", "Right");
-                                } else {
-                                    telemetry.addData("Gold Mineral Position", "Center");
-                                }
-                            }
-                        }
-                    }
-                    telemetry.update();
-                    this.wait();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    return;
-                }
-            }
-        }
-    }
-
-
-    /**
-     * Initialize the Vuforia localization engine.
-     */
-    public void initVuforia() {
-        /*
-         * Configure Vuforia by creating a Parameter object, and passing it to the Vuforia engine.
-         */
-        VuforiaLocalizer.Parameters parameters = new VuforiaLocalizer.Parameters();
-
-        parameters.vuforiaLicenseKey = VUFORIA_KEY;
-        parameters.cameraDirection = VuforiaLocalizer.CameraDirection.BACK;
-
-        //  Instantiate the Vuforia engine
-        vuforia = ClassFactory.getInstance().createVuforia(parameters);
-
-        // Loading trackables is not necessary for the Tensor Flow Object Detection engine.
-    }
-
-    /**
-     * Initialize the Tensor Flow Object Detection engine.
-     */
-    public void initTfod() {
-        int tfodMonitorViewId = hardwareMap.appContext.getResources().getIdentifier(
-                "tfodMonitorViewId", "id", hardwareMap.appContext.getPackageName());
-        TFObjectDetector.Parameters tfodParameters = new TFObjectDetector.Parameters(tfodMonitorViewId);
-        tfod = ClassFactory.getInstance().createTFObjectDetector(tfodParameters, vuforia);
-        tfod.loadModelFromAsset(TFOD_MODEL_ASSET, LABEL_GOLD_MINERAL, LABEL_SILVER_MINERAL);
-    }
 
 
     public void timeDrive ( double speed,
@@ -176,7 +103,8 @@ public abstract class TTLinearOpMode extends LinearOpMode {
             driveTime.reset();
 
             speed = Range.clip(speed, 0.0, 1.0);
-            robotHeadingRad = Math.toRadians(360 - robot.gyro.getHeading());
+//            robotHeadingRad = Math.toRadians(360 - robot.gyro.getHeading());
+            robotHeadingRad = Math.toRadians(getRobotHeading());
             powerCompY = (Math.cos(robotHeadingRad) * (Math.cos(angleRad) * speed)) + (Math.sin(robotHeadingRad) * (Math.sin(angleRad) * speed));
             powerCompX = -(Math.sin(robotHeadingRad) * (Math.cos(angleRad) * speed)) + (Math.cos(robotHeadingRad) * (Math.sin(angleRad) * speed));
 
@@ -194,7 +122,8 @@ public abstract class TTLinearOpMode extends LinearOpMode {
 
                 // Display drive status for the driver.
                 telemetry.addData("Speed",  "FL %5.2f:FR %5.2f:RL %5.2f:RR %5.2f", frontLeftSpeed, frontRightSpeed, rearLeftSpeed, rearRightSpeed);
-                telemetry.addData("Gyro", "Heading: " + robot.gyro.getHeading() + " | IntZValue: " + robot.gyro.getIntegratedZValue());
+                //telemetry.addData("Gyro", "Heading: " + robot.gyro.getHeading() + " | IntZValue: " + robot.gyro.getIntegratedZValue());
+                telemetry.addData("Gyro", "Heading: " + getRobotHeading());
                 telemetry.update();
             }
 
@@ -227,7 +156,8 @@ public abstract class TTLinearOpMode extends LinearOpMode {
             driveTime.reset();
 
             speed = Range.clip(speed, 0.0, 1.0);
-            robotHeadingRad = Math.toRadians(360 - robot.gyro.getHeading());
+//            robotHeadingRad = Math.toRadians(360 - robot.gyro.getHeading());
+            robotHeadingRad = Math.toRadians(getRobotHeading());
             powerCompY = (Math.cos(robotHeadingRad) * (Math.cos(angleRad) * speed)) + (Math.sin(robotHeadingRad) * (Math.sin(angleRad) * speed));
             powerCompX = -(Math.sin(robotHeadingRad) * (Math.cos(angleRad) * speed)) + (Math.cos(robotHeadingRad) * (Math.sin(angleRad) * speed));
 
@@ -237,7 +167,7 @@ public abstract class TTLinearOpMode extends LinearOpMode {
             rearRightSpeed = -powerCompY - powerCompX;
 
             // keep looping while we are still active, and BOTH motors are running.
-            while (opModeIsActive() && getColorHue(robot.sensorColorBottom) < 180.0 && driveTime.seconds() < time) {
+            while (opModeIsActive() && (!(getColorHue(robot.sensorColorBottom) > 175.0) && !(getColorHue(robot.sensorColorBottom) < 100.0))  && driveTime.seconds() < time) {
                 robot.motorFrontLeft.setPower(frontLeftSpeed);
                 robot.motorFrontRight.setPower(frontRightSpeed);
                 robot.motorRearLeft.setPower(rearLeftSpeed);
@@ -245,64 +175,9 @@ public abstract class TTLinearOpMode extends LinearOpMode {
 
                 // Display drive status for the driver.
                 telemetry.addData("Speed",  "FL %5.2f:FR %5.2f:RL %5.2f:RR %5.2f", frontLeftSpeed, frontRightSpeed, rearLeftSpeed, rearRightSpeed);
-                telemetry.addData("Gyro", "Heading: " + robot.gyro.getHeading() + " | IntZValue: " + robot.gyro.getIntegratedZValue());
+                //telemetry.addData("Gyro", "Heading: " + robot.gyro.getHeading() + " | IntZValue: " + robot.gyro.getIntegratedZValue());
+                telemetry.addData("Gyro", "Heading: " + getRobotHeading());
                 telemetry.update();
-            }
-
-            // Stop all motion;
-            robot.motorFrontLeft.setPower(0);
-            robot.motorFrontRight.setPower(0);
-            robot.motorRearLeft.setPower(0);
-            robot.motorRearRight.setPower(0);
-        }
-    }
-
-    public void distLeftDrive ( double speed,
-                                double dist,
-                                double angle) {
-
-        ElapsedTime driveTime = new ElapsedTime();
-
-        double robotHeadingRad = 0.0;
-        double angleRad = Math.toRadians(angle);
-        double powerCompY = 0.0;
-        double powerCompX = 0.0;
-
-        double  frontLeftSpeed;
-        double  frontRightSpeed;
-        double  rearLeftSpeed;
-        double  rearRightSpeed;
-
-        // Ensure that the opmode is still active
-        if (opModeIsActive()) {
-            driveTime.reset();
-
-            speed = Range.clip(speed, 0.0, 1.0);
-            robotHeadingRad = Math.toRadians(360 - robot.gyro.getHeading());
-            powerCompY = (Math.cos(robotHeadingRad) * (Math.cos(angleRad) * speed)) + (Math.sin(robotHeadingRad) * (Math.sin(angleRad) * speed));
-            powerCompX = -(Math.sin(robotHeadingRad) * (Math.cos(angleRad) * speed)) + (Math.cos(robotHeadingRad) * (Math.sin(angleRad) * speed));
-
-            frontLeftSpeed = powerCompY + powerCompX;
-            frontRightSpeed = -powerCompY + powerCompX;
-            rearLeftSpeed = powerCompY - powerCompX;
-            rearRightSpeed = -powerCompY - powerCompX;
-
-            // keep looping while we are still active, and BOTH motors are running.
-            while (opModeIsActive() && driveTime.seconds() < 10.0) {
-
-                /*
-                robot.motorFrontLeft.setPower(frontLeftSpeed);
-                robot.motorFrontRight.setPower(frontRightSpeed);
-                robot.motorRearLeft.setPower(rearLeftSpeed);
-                robot.motorRearRight.setPower(rearRightSpeed);
-                */
-
-                // Display drive status for the driver.
-                telemetry.addData("Speed",  "FL %5.2f:FR %5.2f:RL %5.2f:RR %5.2f", frontLeftSpeed, frontRightSpeed, rearLeftSpeed, rearRightSpeed);
-                telemetry.addData("Gyro", "Heading: " + robot.gyro.getHeading() + " | IntZValue: " + robot.gyro.getIntegratedZValue());
-                telemetry.addData("Left", "Range: " + robot.rangeLeft.getDistance(DistanceUnit.CM));
-                telemetry.update();
-                sleep(500);
             }
 
             // Stop all motion;
@@ -335,7 +210,8 @@ public abstract class TTLinearOpMode extends LinearOpMode {
             driveTime.reset();
 
             speed = Range.clip(speed, 0.0, 1.0);
-            robotHeadingRad = Math.toRadians(360 - robot.gyro.getHeading());
+//            robotHeadingRad = Math.toRadians(360 - robot.gyro.getHeading());
+            robotHeadingRad = Math.toRadians(getRobotHeading());
             powerCompY = (Math.cos(robotHeadingRad) * (Math.cos(angleRad) * speed)) + (Math.sin(robotHeadingRad) * (Math.sin(angleRad) * speed));
             powerCompX = -(Math.sin(robotHeadingRad) * (Math.cos(angleRad) * speed)) + (Math.cos(robotHeadingRad) * (Math.sin(angleRad) * speed));
 
@@ -353,7 +229,8 @@ public abstract class TTLinearOpMode extends LinearOpMode {
 
                 // Display drive status for the driver.
                 telemetry.addData("Speed",  "FL %5.2f:FR %5.2f:RL %5.2f:RR %5.2f", frontLeftSpeed, frontRightSpeed, rearLeftSpeed, rearRightSpeed);
-                telemetry.addData("Gyro", "Heading: " + robot.gyro.getHeading() + " | IntZValue: " + robot.gyro.getIntegratedZValue());
+                //telemetry.addData("Gyro", "Heading: " + robot.gyro.getHeading() + " | IntZValue: " + robot.gyro.getIntegratedZValue());
+                telemetry.addData("Gyro", "Heading: " + getRobotHeading());
                 telemetry.update();
             }
 
@@ -448,7 +325,8 @@ public abstract class TTLinearOpMode extends LinearOpMode {
         double robotError;
 
         // calculate error in -179 to +180 range  (
-        robotError = targetAngle - (360 - robot.gyro.getHeading());
+//        robotError = targetAngle - (360 - robot.gyro.getHeading());
+        robotError = targetAngle - getRobotHeading();
         while (robotError > 180)  robotError -= 360;
         while (robotError <= -180) robotError += 360;
         return robotError;
@@ -513,7 +391,7 @@ public abstract class TTLinearOpMode extends LinearOpMode {
         if (gamepad1.right_trigger != 0) {
             stepVal = dVal;
         } else {
-            double[] stepArray = {0.0, 0.25, 0.25, 0.25, 0.25, 0.25, 0.33, 0.44, 0.56, 0.68, 0.80};
+            double[] stepArray = {0.0, 0.2, 0.2, 0.25, 0.25, 0.33, 0.33, 0.44, 0.44, 0.56, 0.56};
 
             // get the corresponding index for the scaleInput array.
             int index = Math.abs((int) (dVal * 10.0));
@@ -542,7 +420,7 @@ public abstract class TTLinearOpMode extends LinearOpMode {
         if (gamepad1.right_trigger != 0) {
             stepVal = dVal;
         } else {
-            double[] stepArray = {0.0, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2};
+            double[] stepArray = {0.0, 0.15, 0.15, 0.2, 0.2, 0.25, 0.25, 0.3, 0.3, 0.35, 0.35};
 
             // get the corresponding index for the scaleInput array.
             int index = Math.abs((int) (dVal * 10.0));
@@ -564,70 +442,79 @@ public abstract class TTLinearOpMode extends LinearOpMode {
         return stepVal;
     }
 
+
     /**
-     * {@link #tfod} is the variable we will use to store our instance of the Tensor Flow Object
-     * Detection engine.
+     * Initialize the Vuforia localization engine.
      */
-    // private TFObjectDetector tfod;
-    public String senseMineral (){
+    public void initVuforia() {
+        /*
+         * Configure Vuforia by creating a Parameter object, and passing it to the Vuforia engine.
+         */
+        VuforiaLocalizer.Parameters parameters = new VuforiaLocalizer.Parameters();
 
-        String goldPosition = "M";
-        initVuforia();
+        parameters.vuforiaLicenseKey = VUFORIA_KEY;
+        parameters.cameraDirection = VuforiaLocalizer.CameraDirection.BACK;
 
-        if (ClassFactory.getInstance().canCreateTFObjectDetector()) {
-            initTfod();
-        } else {
-            telemetry.addData("Sorry!", "This device is not compatible with TFOD");
-        }
+        //  Instantiate the Vuforia engine
+        vuforia = ClassFactory.getInstance().createVuforia(parameters);
+    }
 
-        while (opModeIsActive()) {
-            if (tfod != null) {
-                // getUpdatedRecognitions() will return null if no new information is available since
-                // the last time that call was made.
-                List<Recognition> updatedRecognitions = tfod.getUpdatedRecognitions();
-                if (updatedRecognitions != null) {
-                    telemetry.addData("# Object Detected", updatedRecognitions.size());
+    /**
+     * Initialize the Tensor Flow Object Detection engine.
+     */
+    public void initTfod() {
+        int tfodMonitorViewId = hardwareMap.appContext.getResources().getIdentifier(
+                "tfodMonitorViewId", "id", hardwareMap.appContext.getPackageName());
+        TFObjectDetector.Parameters tfodParameters = new TFObjectDetector.Parameters(tfodMonitorViewId);
+        tfod = ClassFactory.getInstance().createTFObjectDetector(tfodParameters, vuforia);
+        tfod.loadModelFromAsset(TFOD_MODEL_ASSET, LABEL_GOLD_MINERAL, LABEL_SILVER_MINERAL);
+    }
 
-                    if (updatedRecognitions.size() == 3) {
-                        int goldMineralX = -1;
-                        int silverMineral1X = -1;
-                        int silverMineral2X = -1;
-                        for (Recognition recognition : updatedRecognitions) {
-                            if (recognition.getLabel().equals(LABEL_GOLD_MINERAL)) {
-                                goldMineralX = (int) recognition.getLeft();
-                            /*telemetry.addData("gMX", goldMineralX);
-                            telemetry.update();
-                            sleep(5000);*/
-                            } else if (silverMineral1X == -1) {
-                                silverMineral1X = (int) recognition.getLeft();
-                              /*telemetry.addData("sM1X", goldMineralX);
-                              telemetry.update();
-                              sleep(5000);*/
-                            } else {
-                                silverMineral2X = (int) recognition.getLeft();
-                              /*telemetry.addData("sM2X", goldMineralX);
-                              telemetry.update();
-                              sleep(5000);*/
-                            }
+
+    public GoldMineralPos getGoldPosition (List<Recognition> updatedRecognitions) {
+        GoldMineralPos goldMineralPosition = GoldMineralPos.UNKNOWN;
+
+        if (tfod != null && updatedRecognitions != null) {
+            boolean isGoldDetected = false;
+            int gMineralPos = -1;
+            int sMineralPos = -1;
+
+            telemetry.addData("# Object Detected", updatedRecognitions.size());
+            for (Recognition recognition : updatedRecognitions) {
+                if (recognition.getLabel().equals(LABEL_GOLD_MINERAL)) {
+                    isGoldDetected = true;
+                }
+                int top = (int) recognition.getTop();
+                int left = (int) recognition.getLeft();
+                telemetry.addData("Pos", "Left: " + left +  " | Top: "+ top + " | Label: " + recognition.getLabel());
+            }
+            if (updatedRecognitions.size() == 2) {
+                if (isGoldDetected) {
+                    for (Recognition recognition : updatedRecognitions) {
+                        if (recognition.getLabel().equals(LABEL_GOLD_MINERAL)) {
+                            gMineralPos = (int) recognition.getTop();
+                        } else {
+                            sMineralPos = (int) recognition.getTop();
                         }
-                        //Comparing the left postion to determin the Gold positon
-                        if (goldMineralX != -1 && silverMineral1X != -1 && silverMineral2X != -1) {
-                            if (goldMineralX < silverMineral1X && goldMineralX < silverMineral2X) {
-                                //telemetry.addData("Gold Mineral Position", "Left");
-                                goldPosition = "L";
-                            } else if (goldMineralX > silverMineral1X && goldMineralX > silverMineral2X) {
-                                //telemetry.addData("Gold Mineral Position", "Right");
-                                goldPosition = "R";
-                            }
-                        }
-
                     }
-
+                    if (gMineralPos < sMineralPos) {
+                        goldMineralPosition = GoldMineralPos.LEFT;
+                    } else {
+                        goldMineralPosition = GoldMineralPos.MIDDLE;
+                    }
+                } else {
+                    goldMineralPosition = GoldMineralPos.RIGHT;
                 }
             }
         }
 
-        return goldPosition;
+        return goldMineralPosition;
     }
+
+    public float getRobotHeading() {
+        angles1 = robot.imu1.getAngularOrientation(AxesReference.INTRINSIC, AxesOrder.ZYX, AngleUnit.DEGREES);
+        return -AngleUnit.DEGREES.fromUnit(angles1.angleUnit, angles1.firstAngle);
+    }
+
 }
 
